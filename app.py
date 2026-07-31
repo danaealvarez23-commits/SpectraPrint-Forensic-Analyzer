@@ -34,32 +34,30 @@ def process_forensic(raw_img, crop_val):
     c = int(crop_val * 0.01 * min(h, w))
     if c > 0: raw_img = raw_img[c:h-c, c:w-c]
     
-    # 2. Enhancement (FBI Standard: CLAHE -> Normalization)
+    # 2. Enhancement
     clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8,8))
     enhanced = clahe.apply(raw_img)
-    inverted = cv2.bitwise_not(enhanced) # High-Contrast Inverted View
+    inverted = cv2.bitwise_not(enhanced) 
     
     # 3. Binarization & Skeletonization
     binary = cv2.adaptiveThreshold(enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
     if np.mean(binary) > 127: binary = cv2.bitwise_not(binary)
     skel = (skeletonize(binary//255) * 255).astype(np.uint8)
     
-    # 4. AFIS-Style Characterization (Circles + Tails)
+    # 4. AFIS-Style Characterization
     feats = []
     rows, cols = skel.shape
-    char_map = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR) # Draw on enhanced background
+    char_map = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
     
     for i in range(2, rows-2):
         for j in range(2, cols-2):
             if skel[i,j] == 255:
                 block = skel[i-1:i+2, j-1:j+2]
                 block_sum = np.sum(block) / 255
-                if block_sum == 2 or block_sum == 4: # Ending or Bifurcation
+                if block_sum == 2 or block_sum == 4:
                     angle = get_orientation(enhanced, j, i)
                     feats.append((j, i, angle))
-                    # Draw FBI-style marker: Circle
                     cv2.circle(char_map, (j, i), 6, (0, 0, 255), 1)
-                    # Draw Orientation Tail
                     x2 = int(j + 12 * math.cos(angle))
                     y2 = int(i + 12 * math.sin(angle))
                     cv2.line(char_map, (j, i), (x2, y2), (0, 0, 255), 1)
@@ -120,8 +118,7 @@ with tabs[1]:
     if st.session_state.baseline_data and st.session_state.current_data:
         b, c = st.session_state.baseline_data, st.session_state.current_data
         
-        # Area Collection Calculation
-        area_pct = (c['area'] / b['area']) * 100
+        area_pct = (float(c['area']) / float(b['area'])) * 100
         minutiae_ret = (len(c['feats']) / len(b['feats'])) * 100 if len(b['feats']) > 0 else 0
         fqs = (area_pct * 0.3) + (minutiae_ret * 0.5) + (uv_input * 10)
         
@@ -154,37 +151,20 @@ with tabs[3]:
         if st.button("🛠️ Build PDF Report"):
             pdf = FPDF()
             pdf.add_page()
-            
-            # Header
-            pdf.set_font("Arial", 'B', 18)
+            pdf.set_font("Arial", 'B', 16)
             pdf.cell(200, 10, "SPECTRAPRINT AI: MASTER FORENSIC REPORT", ln=True, align='C')
-            pdf.line(10, 22, 200, 22)
-            
-            # Case Metadata
-            pdf.ln(5)
+            pdf.ln(10)
             pdf.set_font("Arial", 'B', 12)
-            pdf.cell(200, 10, f"Case ID: {case_id} | examiner: {examiner}", ln=True)
+            pdf.cell(200, 10, f"Case ID: {case_id} | Lead Examiner: {examiner}", ln=True)
             pdf.set_font("Arial", '', 10)
             pdf.cell(200, 7, f"Pattern: {pattern_type} | Method: {collection}", ln=True)
-            pdf.cell(200, 7, f"Analysis Date: {datetime.datetime.now()}", ln=True)
-            
-            # Quantitative Summary
+            pdf.cell(200, 7, f"Analysis Date: {datetime.datetime.now().strftime('%Y-%m-%d')}", ln=True)
             pdf.ln(5)
-            pdf.set_fill_color(230, 230, 230)
-            pdf.set_font("Arial", 'B', 12)
-            pdf.cell(200, 10, " QUANTITATIVE DEGRADATION SUMMARY", ln=True, fill=True)
-            pdf.set_font("Arial", '', 11)
             pdf.cell(200, 8, f" - Area Collected (% of Baseline): {area_pct:.2f}%", ln=True)
             pdf.cell(200, 8, f" - Minutiae Retention: {minutiae_ret:.2f}%", ln=True)
-            pdf.cell(200, 8, f" - Baseline Minutiae Count: {len(b['feats'])}", ln=True)
-            pdf.cell(200, 8, f" - Current Minutiae Count: {len(c['feats'])}", ln=True)
             pdf.cell(200, 8, f" - FINAL QUALITY SCORE (FQS): {fqs:.2f}", ln=True)
 
-            # Note on orientation
-            pdf.ln(5)
-            pdf.set_font("Arial", 'I', 10)
-            pdf.multi_cell(190, 5, "Technical Note: Characterization points are mapped using the Crossing Number algorithm with orientation vectoring (tails) calculated via Sobel gradients for AFIS-style visualization.")
-
-            # PDF Output
             pdf_out = pdf.output(dest='S').encode('latin-1')
-            st.download_button("📩 Download Completed PDF", pdf_bytes=pdf_out, file_name=f"SpectraPrint_Report_{case_id}.pdf", mime="application/pdf")S
+            st.download_button(label="📩 Download Completed PDF", data=pdf_out, file_name=f"SpectraPrint_Report_{case_id}.pdf", mime="application/pdf")
+    else:
+        st.info("Complete analysis in Tab 1 and 2 first.")
