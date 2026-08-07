@@ -7,3 +7,4 @@ plotly
 pandas
 fpdf
 matplotlib
+Pillow
